@@ -141,12 +141,9 @@ static falco::app::run_result do_inspect(
 	uint32_t timeouts_since_last_success_or_msg = 0;
 	token_bucket rate_limiter;
 	bool rate_limiter_enabled = s.config->m_notifications_rate > 0;
-	bool source_engine_idx_found = false;
 	bool is_capture_mode = source.empty();
-	bool syscall_source_engine_idx = s.source_infos.at(falco_common::syscall_source)->engine_idx;
+	const bool syscall_source_engine_idx = s.source_infos.at(falco_common::syscall_source)->engine_idx;
 	std::size_t source_engine_idx = 0;
-	std::vector<std::string> source_names = inspector->get_plugin_manager()->sources();
-	source_names.push_back(falco_common::syscall_source);
 	if (!is_capture_mode)
 	{
 		source_engine_idx = s.source_infos.at(source)->engine_idx;
@@ -260,21 +257,24 @@ static falco::app::run_result do_inspect(
 		// if we are in live mode, we already have the right source engine idx
 		if (is_capture_mode)
 		{
-			source_engine_idx = syscall_source_engine_idx;
-			if (ev->get_type() == PPME_PLUGINEVENT_E)
+			// note: here we can assume that the source index will be the same
+			// in both the falco engine and the inspector. See the
+			// comment in init_falco_engine.cpp for more details.
+			source_engine_idx = ev->get_source_idx();
+			if (source_engine_idx == sinsp_no_event_source_idx)
 			{
-				// note: here we can assume that the source index will be the same
-				// in both the falco engine and the sinsp plugin manager. See the
-				// comment in init_falco_engine.cpp for more details.
-				source_engine_idx = inspector->get_plugin_manager()->source_idx_by_plugin_id(*(int32_t *)ev->get_param(0)->m_val, source_engine_idx_found);
-				if (!source_engine_idx_found)
+				if (ev->get_type() == PPME_PLUGINEVENT_E)
 				{
 					return run_result::fatal("Unknown plugin ID in inspector: " + std::to_string(*(int32_t *)ev->get_param(0)->m_val));
 				}
-			}
 
+				// the event is probably a meta-event, so we just fallback to
+				// the syscall event source
+				source_engine_idx = syscall_source_engine_idx;
+			}
+	
 			// for capture mode, the source name can change at every event
-			stats_collector.collect(inspector, source_names[source_engine_idx]);
+			stats_collector.collect(inspector, inspector->event_sources()[source_engine_idx]);
 		}
 		else
 		{
