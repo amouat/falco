@@ -25,6 +25,11 @@ falco::atomic_signal_handler falco::app::g_reopen_outputs_signal;
 
 using app_action = std::function<falco::app::run_result(falco::app::state&)>;
 
+libsinsp::events::set<ppm_sc_code> falco::app::ignored_sc_set()
+{
+	return libsinsp::events::io_sc_set().diff(libsinsp::events::sinsp_state_sc_set());
+}
+
 bool falco::app::run(int argc, char** argv, bool& restart, std::string& errstr)
 {
 	falco::app::state s;    
